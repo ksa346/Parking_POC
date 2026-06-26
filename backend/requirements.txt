@@ -1,0 +1,30 @@
+# Backend Dependencies
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+websockets>=12.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+numpy>=1.26.0
+opencv-python-headless>=4.9.0
+Pillow>=10.2.0
+ultralytics>=8.2.0
+rfdetr>=1.0.8
+sahi>=0.11.0
+aiosqlite>=0.19.0
+psycopg2-binary>=2.9.9
+SQLAlchemy>=2.0.30
+scikit-learn>=1.4.0
+pandas>=2.2.0
+httpx>=0.26.0
+aiofiles>=23.2.0
+python-json-logger>=2.0.7
+openpyxl>=3.1.0
+scipy>=1.11.0
+imageio-ffmpeg>=0.5.1
+# AI / Chat
+openai>=1.82.0
+pydantic-ai>=0.2.14
+python-dotenv>=1.0.0
+websockets
+imageio-ffmpeg>=0.5.1

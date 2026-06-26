@@ -1,0 +1,397 @@
+@using BlazorParking.Services.State
+@page "/detection-evidence"
+@inject EntryExitState Params
+@inject IWebHostEnvironment Environment
+
+<PageTitle>Detection Evidence - Cornerstone Garage</PageTitle>
+
+<div class="card">
+    <div class="card-header section-header" @onclick="ToggleEntrySection">
+        <div class="section-header-row">
+            <div class="section-header-left">
+                <span class="section-toggle">@(_entryExpanded ? "v" : ">")</span>
+                <h3 class="card-title section-title">ENTRY DETECTION</h3>
+                <span class="thumbnail-badge">@_entryDetections.Count detections</span>
+            </div>
+        </div>
+    </div>
+
+    @if (_entryExpanded)
+    {
+        <div class="evidence-list">
+            @foreach (var item in _entryDetections.AsEnumerable().Reverse())
+            {
+                var review = GetReview(item);
+                <div class="evidence-item">
+                    <button class="evidence-bar" @onclick="() => ToggleItem(item)">
+                        <div class="evidence-bar-left">
+                            <span class="zone-pill">Zone2</span>
+                            <span class="bar-time">@item.Time.ToString("yyyy-MM-dd hh:mm:ss tt")</span>
+                        </div>
+                        <div class="evidence-bar-right">
+                            <span class="status-chip @GetStatusClass(item.ValidationStatus)">@item.ValidationStatus</span>
+                            <span class="bar-expand">@(IsItemExpanded(item) ? "v" : ">")</span>
+                        </div>
+                    </button>
+
+                    @if (IsItemExpanded(item))
+                    {
+                        <div class="evidence-expanded">
+                            <div class="evidence-image-panel">
+                                <img src="@(GetImagePath(item, "entry"))" class="evidence-image" alt="Detection evidence" />
+                            </div>
+                            <div class="evidence-details-panel">
+                                <h5 class="details-title">Detection Details</h5>
+                                <div class="detail-row"><strong>Frame Name:</strong> @item.Frame</div>
+                                <div class="detail-row"><strong>Timestamp:</strong> @item.Time.ToString("yyyy-MM-dd hh:mm:ss tt")</div>
+                                <div class="detail-row"><strong>Direction:</strong> @item.DetectionType</div>
+                                <div class="detail-row"><strong>Count Impact:</strong> @(item.Count > 0 ? "+1" : "-1")</div>
+
+                                <div class="feedback-section-inline">
+                                    <h5 class="details-title">Feedback</h5>
+                                    <div class="feedback-buttons">
+                                        <button class="feedback-option-btn @(review.IsCorrectDetection == true ? "selected" : "")"
+                                                @onclick="() => SetFeedback(item, true)">Correct Detection</button>
+                                        <button class="feedback-option-btn @(review.IsCorrectDetection == false ? "selected" : "")"
+                                                @onclick="() => SetFeedback(item, false)">Incorrect Detection</button>
+                                    </div>
+                                </div>
+
+                                <div class="comment-section">
+                                    <label>Comments</label>
+                                    <textarea class="feedback-textarea" rows="4" @bind="review.Comments"></textarea>
+                                </div>
+
+                                <div class="feedback-footer">
+                                    <button class="btn-reset" @onclick="() => CancelReview(item)">Cancel</button>
+                                    <button class="btn-apply" @onclick="() => SubmitFeedback(item)">Submit</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!_entryDetections.Any())
+            {
+                <div class="thumbnail-empty-state">
+                    <p>No entry detections yet.</p>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<div class="card evidence-section-gap mt-4">
+    <div class="card-header section-header" @onclick="ToggleExitSection">
+        <div class="section-header-row">
+            <div class="section-header-left">
+                <span class="section-toggle">@(_exitExpanded ? "v" : ">")</span>
+                <h3 class="card-title section-title">EXIT DETECTION</h3>
+                <span class="thumbnail-badge">@_exitDetections.Count detections</span>
+            </div>
+        </div>
+    </div>
+
+    @if (_exitExpanded)
+    {
+        <div class="evidence-list">
+            @foreach (var item in _exitDetections.AsEnumerable().Reverse())
+            {
+                var review = GetReview(item);
+                <div class="evidence-item">
+                    <button class="evidence-bar" @onclick="() => ToggleItem(item)">
+                        <div class="evidence-bar-left">
+                            <span class="zone-pill">Zone2</span>
+                            <span class="bar-time">@item.Time.ToString("yyyy-MM-dd hh:mm:ss tt")</span>
+                        </div>
+                        <div class="evidence-bar-right">
+                            <span class="status-chip @GetStatusClass(item.ValidationStatus)">@item.ValidationStatus</span>
+                            <span class="bar-expand">@(IsItemExpanded(item) ? "v" : ">")</span>
+                        </div>
+                    </button>
+
+                    @if (IsItemExpanded(item))
+                    {
+                        <div class="evidence-expanded">
+                            <div class="evidence-image-panel">
+                                <img src="@(GetImagePath(item, "exit"))" class="evidence-image" alt="Detection evidence" />
+                            </div>
+                            <div class="evidence-details-panel">
+                                <h5 class="details-title">Detection Details</h5>
+                                <div class="detail-row"><strong>Frame Name:</strong> @item.Frame</div>
+                                <div class="detail-row"><strong>Timestamp:</strong> @item.Time.ToString("yyyy-MM-dd hh:mm:ss tt")</div>
+                                <div class="detail-row"><strong>Direction:</strong> @item.DetectionType</div>
+                                <div class="detail-row"><strong>Count Impact:</strong> @(item.Count > 0 ? "+1" : "-1")</div>
+
+                                <div class="feedback-section-inline">
+                                    <h5 class="details-title">Feedback</h5>
+                                    <div class="feedback-buttons">
+                                        <button class="feedback-option-btn @(review.IsCorrectDetection == true ? "selected" : "")"
+                                                @onclick="() => SetFeedback(item, true)">Correct Detection</button>
+                                        <button class="feedback-option-btn @(review.IsCorrectDetection == false ? "selected" : "")"
+                                                @onclick="() => SetFeedback(item, false)">Incorrect Detection</button>
+                                    </div>
+                                </div>
+
+                                <div class="comment-section">
+                                    <label>Comments</label>
+                                    <textarea class="feedback-textarea" rows="4" @bind="review.Comments"></textarea>
+                                </div>
+
+                                <div class="feedback-footer">
+                                    <button class="btn-reset" @onclick="() => CancelReview(item)">Cancel</button>
+                                    <button class="btn-apply" @onclick="() => SubmitFeedback(item)">Submit</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!_exitDetections.Any())
+            {
+                <div class="thumbnail-empty-state">
+                    <p>No exit detections yet.</p>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<ValidationRecord> _validations = [];
+    private List<ValidationRecord> _entryDetections = [];
+    private List<ValidationRecord> _exitDetections = [];
+    private readonly HashSet<string> _expandedItems = [];
+    private readonly Dictionary<string, DetectionReviewModel> _reviewByItemKey = [];
+    private bool _entryExpanded = false;
+    private bool _exitExpanded = false;
+
+    protected override void OnInitialized()
+    {
+        _validations = LoadValidations();
+        RefreshSections();
+    }
+
+    private List<ValidationRecord> LoadValidations()
+    {
+        if (Params.Validations.Count > 0)
+            return new List<ValidationRecord>(Params.Validations);
+
+        // Prefer live evidence directories received from the WebSocket
+        var entryDir = ResolveLocalEvidenceDirectory(
+            Params.EntryEvidenceDir,
+            Path.Combine("data", "entry_exit_images"),
+            Path.Combine("data", "evidance", "entry"));
+
+        var exitDir = ResolveLocalEvidenceDirectory(
+            Params.ExitEvidenceDir,
+            Path.Combine("data", "entry_exit_images"),
+            Path.Combine("data", "evidance", "exit"));
+
+        var records = new List<ValidationRecord>();
+        records.AddRange(BuildValidationRecords(entryDir, "Entry", 1));
+        records.AddRange(BuildValidationRecords(exitDir, "Exit", -1));
+
+        Params.Validations = new List<ValidationRecord>(records);
+        return records;
+    }
+
+    private void ToggleEntrySection()
+    {
+        _entryExpanded = !_entryExpanded;
+    }
+
+    private void ToggleExitSection()
+    {
+        _exitExpanded = !_exitExpanded;
+    }
+
+    private void ToggleItem(ValidationRecord item)
+    {
+        var key = GetItemKey(item);
+        EnsureReview(item);
+        if (!_expandedItems.Add(key))
+            _expandedItems.Remove(key);
+    }
+
+    private bool IsItemExpanded(ValidationRecord item) =>
+        _expandedItems.Contains(GetItemKey(item));
+
+    private DetectionReviewModel GetReview(ValidationRecord item)
+    {
+        EnsureReview(item);
+        return _reviewByItemKey[GetItemKey(item)];
+    }
+
+    private void SetFeedback(ValidationRecord item, bool isCorrect)
+    {
+        var review = GetReview(item);
+        review.IsCorrectDetection = isCorrect;
+    }
+
+    private void CancelReview(ValidationRecord item)
+    {
+        _reviewByItemKey[GetItemKey(item)] = CreateReview(item);
+        _expandedItems.Remove(GetItemKey(item));
+    }
+
+    private void SubmitFeedback(ValidationRecord item)
+    {
+        var review = GetReview(item);
+        var status = item.ValidationStatus;
+
+        if (review.IsCorrectDetection == true)
+            status = "Approved";
+        else if (review.IsCorrectDetection == false)
+            status = "Rejected";
+
+        var index = _validations.FindIndex(v => v.Id == item.Id && v.FileName == item.FileName);
+        if (index >= 0)
+            _validations[index] = _validations[index] with { ValidationStatus = status };
+
+        Params.Validations = new List<ValidationRecord>(_validations);
+        RefreshSections();
+        _expandedItems.Remove(GetItemKey(item));
+    }
+
+    private string GetStatusClass(string status)
+    {
+        if (string.Equals(status, "Approved", StringComparison.OrdinalIgnoreCase))
+            return "status-approved";
+        if (string.Equals(status, "Rejected", StringComparison.OrdinalIgnoreCase))
+            return "status-rejected";
+        return "status-pending";
+    }
+
+    private void RefreshSections()
+    {
+        _entryDetections = _validations.Where(v => v.DetectionType == "Entry").ToList();
+        _exitDetections = _validations.Where(v => v.DetectionType == "Exit").ToList();
+    }
+
+    private void EnsureReview(ValidationRecord item)
+    {
+        var key = GetItemKey(item);
+        if (!_reviewByItemKey.ContainsKey(key))
+            _reviewByItemKey[key] = CreateReview(item);
+    }
+
+    private static IEnumerable<ValidationRecord> BuildValidationRecords(string directoryPath, string detectionType, int countImpact)
+    {
+        if (!Directory.Exists(directoryPath))
+            yield break;
+
+        var nextId = 1;
+        foreach (var filePath in Directory
+            .EnumerateFiles(directoryPath)
+            .OrderBy(File.GetLastWriteTimeUtc))
+        {
+            var fileName = Path.GetFileName(filePath);
+            yield return new ValidationRecord(
+                nextId++,
+                File.GetLastWriteTime(filePath),
+                fileName,
+                fileName,
+                countImpact,
+                detectionType,
+                "Pending");
+        }
+    }
+
+    private static string GetItemKey(ValidationRecord item) =>
+        $"{item.DetectionType}:{item.Id}:{item.FileName}";
+
+    private static DetectionReviewModel CreateReview(ValidationRecord item)
+    {
+        bool? isCorrect;
+        if (item.ValidationStatus.Equals("Approved", StringComparison.OrdinalIgnoreCase))
+            isCorrect = true;
+        else if (item.ValidationStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase))
+            isCorrect = false;
+        else
+            isCorrect = null;
+
+        return new DetectionReviewModel
+        {
+            ImagePath = item.FileName,
+            FrameName = item.Frame,
+            TimeStamp = item.Time,
+            Direction = item.DetectionType,
+            CountImapct = item.Count,
+            IsCorrectDetection = isCorrect
+        };
+    }
+
+    private string GetImagePath(ValidationRecord item, string direction)
+    {
+        var evidenceDir = direction == "entry" ? Params.EntryEvidenceDir : Params.ExitEvidenceDir;
+
+        var entryExitImageUrl = TryMapToPublicImageUrl(evidenceDir, "/entry-exit-images", Path.Combine("data", "entry_exit_images"));
+        if (!string.IsNullOrWhiteSpace(entryExitImageUrl))
+            return $"{entryExitImageUrl}/{item.FileName}";
+
+        var evidanceUrl = TryMapToPublicImageUrl(evidenceDir, "/evidance", Path.Combine("data", "evidance"));
+        if (!string.IsNullOrWhiteSpace(evidanceUrl))
+            return $"{evidanceUrl}/{item.FileName}";
+
+        // Fallback to static evidance directory
+        return $"/evidance/{direction}/{item.FileName}";
+    }
+
+    private string ResolveLocalEvidenceDirectory(string? configuredDirectory, string preferredRoot, string fallbackRelativeDirectory)
+    {
+        var resolvedDirectory = TryMapToLocalDirectory(configuredDirectory, preferredRoot)
+            ?? TryMapToLocalDirectory(configuredDirectory, Path.Combine("data", "evidance"));
+
+        if (!string.IsNullOrWhiteSpace(resolvedDirectory) && Directory.Exists(resolvedDirectory))
+            return resolvedDirectory;
+
+        return Path.Combine(Environment.ContentRootPath, fallbackRelativeDirectory);
+    }
+
+    private string? TryMapToLocalDirectory(string? rawDirectory, string rootSegment)
+    {
+        var relativeDirectory = ExtractRelativeSubpath(rawDirectory, rootSegment);
+        if (relativeDirectory is null)
+            return null;
+
+        return Path.Combine(Environment.ContentRootPath, rootSegment, relativeDirectory);
+    }
+
+    private static string? TryMapToPublicImageUrl(string? rawDirectory, string requestPathRoot, string rootSegment)
+    {
+        var relativeDirectory = ExtractRelativeSubpath(rawDirectory, rootSegment);
+        if (relativeDirectory is not null)
+            return $"{requestPathRoot}/{relativeDirectory.Replace('\\', '/').Trim('/')}";
+
+        if (!string.IsNullOrWhiteSpace(rawDirectory) &&
+            (rawDirectory.StartsWith("/", StringComparison.Ordinal) || rawDirectory.StartsWith("http", StringComparison.OrdinalIgnoreCase)))
+        {
+            return rawDirectory.TrimEnd('/');
+        }
+
+        return null;
+    }
+
+    private static string? ExtractRelativeSubpath(string? rawDirectory, string rootSegment)
+    {
+        if (string.IsNullOrWhiteSpace(rawDirectory))
+            return null;
+
+        var normalizedDirectory = rawDirectory.Replace('\\', '/');
+        var normalizedRoot = rootSegment.Replace('\\', '/').Trim('/');
+        var marker = $"/{normalizedRoot}/";
+        var markerIndex = normalizedDirectory.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+
+        if (markerIndex >= 0)
+            return normalizedDirectory[(markerIndex + marker.Length)..].Trim('/');
+
+        var rootedSuffix = $"/{normalizedRoot}";
+        if (normalizedDirectory.EndsWith(rootedSuffix, StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        return null;
+    }
+}

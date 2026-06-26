@@ -1,0 +1,319 @@
+@page "/dashboard"
+@implements IDisposable
+@inject OccupancyWebSocketService WsService
+@inject ParkingService Api
+@inject IJSRuntime JS
+
+<PageTitle>Live Dashboard — Cornerstone Garage</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Live Dashboard</h1>
+        <p class="page-subtitle">Cornerstone Garage &bull; @DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <span class="status-badge @(_wsStatus == "connected" ? "badge-live" : "badge-offline")">
+        @(_wsStatus == "connected" ? "● Live" : "○ Offline")
+    </span>
+</div>
+
+<!-- Stat Cards -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-blue">P</div>
+        <div class="stat-body">
+            <div class="stat-value text-blue">@(_occupancy?.TotalSpots ?? 0)</div>
+            <div class="stat-label">TOTAL SPOTS</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-green">✓</div>
+        <div class="stat-body">
+            <div class="stat-value text-green">@(_occupancy?.AvailableSpots ?? 0)</div>
+            <div class="stat-label">AVAILABLE NOW</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-orange">⊙</div>
+        <div class="stat-body">
+            <div class="stat-value text-orange">@(_occupancy?.OccupancyPercent.ToString("F0") ?? "0")%</div>
+            <div class="stat-label">OCCUPIED</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-gold">◎</div>
+        <div class="stat-body">
+            <div class="stat-value text-gold">@PeakHourDisplay</div>
+            <div class="stat-label">PEAK HOUR</div>
+        </div>
+    </div>
+</div>
+
+<!-- Row: Occupancy Ring + History Chart -->
+<div class="dash-row mt-4">
+    <div class="card ring-card">
+        <div class="card-header">
+            <h3 class="card-title">CAMPUS OCCUPANCY</h3>
+        </div>
+        <div class="ring-wrap">
+            <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#E2E8F0" stroke-width="12" />
+                <circle cx="60" cy="60" r="50" fill="none"
+                        stroke="@RingColor"
+                        stroke-width="12"
+                        stroke-dasharray="@_ringDash @_ringGap"
+                        stroke-dashoffset="78.54"
+                        stroke-linecap="round"
+                        transform="rotate(-90 60 60)" />
+                <text x="60" y="55" text-anchor="middle" class="ring-pct-text">
+                    @(_occupancy?.OccupancyPercent.ToString("F0") ?? "0")%
+                </text>
+                <text x="60" y="70" text-anchor="middle" class="ring-sub-text">occupied</text>
+            </svg>
+        </div>
+        <div class="ring-legend">
+            <div class="legend-item">
+                <span class="legend-dot" style="background:#22C55E;"></span>
+                Available (@(_occupancy?.AvailableSpots ?? 0))
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background:#1B4F8A;"></span>
+                Occupied (@(_occupancy?.OccupiedSpots ?? 0))
+            </div>
+        </div>
+    </div>
+
+    <div class="card chart-card">
+        <div class="card-header">
+            <h3 class="card-title">OCCUPANCY HISTORY (24H)</h3>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="historyChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Row: Video Feed + Chat -->
+<div class="dash-row mt-4">
+    <div class="card video-card">
+        <div class="card-header">
+            <h3 class="card-title">DETECTION FEED</h3>
+            <span class="status-dot @(_wsStatus == "connected" ? "dot-live" : "dot-off")"></span>
+        </div>
+        <div class="video-wrap">
+            @if (!string.IsNullOrEmpty(_frameUrl))
+            {
+                <img src="@_frameUrl" alt="Detection frame" class="video-frame" @onerror="HandleFrameError" />
+            }
+            else
+            {
+                <div class="video-placeholder">
+                    <span>No feed available</span>
+                </div>
+            }
+        </div>
+        <div class="video-meta text-muted">
+            @if (!string.IsNullOrEmpty(_occupancy?.DetectionMethod))
+            {
+                <span>Model: @_occupancy.DetectionMethod.Split(':').LastOrDefault()</span>
+                <span>&bull;</span>
+                <span>Confidence: @_occupancy.Confidence</span>
+            }
+            else
+            {
+                <span>Refreshes every 2 seconds</span>
+            }
+        </div>
+    </div>
+
+    <div class="card chat-card">
+        <div class="card-header">
+            <h3 class="card-title">AI ASSISTANT</h3>
+        </div>
+        <div class="chat-messages" @ref="_chatContainer">
+            @if (!_chatMessages.Any())
+            {
+                <div class="chat-empty text-muted">Ask me about parking availability, trends, or patterns.</div>
+            }
+            @foreach (var msg in _chatMessages)
+            {
+                <div class="chat-msg @(msg.Role == "user" ? "msg-user" : "msg-bot")">
+                    <div class="msg-bubble">@msg.Content</div>
+                </div>
+            }
+            @if (_chatLoading)
+            {
+                <div class="chat-msg msg-bot">
+                    <div class="msg-bubble msg-typing">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="chat-input-row">
+            <input class="chat-input"
+                   @bind="_chatInput"
+                   @bind:event="oninput"
+                   @onkeydown="OnChatKeyDown"
+                   placeholder="Ask about parking..." />
+            <button class="btn-send"
+                    @onclick="SendChat"
+                    disabled="@(_chatLoading || string.IsNullOrWhiteSpace(_chatInput))">
+                ➤
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Zone Heatmap -->
+@if (_occupancy?.Zones.Count > 0)
+{
+    <div class="card mt-4">
+        <div class="card-header">
+            <h3 class="card-title">LOT OCCUPANCY COMPARISON</h3>
+        </div>
+        <div class="zone-compare-list">
+            @foreach (var zone in _occupancy.Zones)
+            {
+                var pct = zone.Total > 0 ? (double)zone.Occupied / zone.Total * 100 : 0;
+                <div class="zone-compare-row">
+                    <span class="zone-compare-name">Zone @zone.ZoneId</span>
+                    <div class="zone-compare-bar-wrap">
+                        <div class="zone-compare-bar">
+                            <div class="zone-compare-fill @(pct < 50 ? "fill-green" : pct < 80 ? "fill-orange" : "fill-red")"
+                                 style="width: @pct.ToString("F0")%;"></div>
+                        </div>
+                    </div>
+                    <span class="zone-compare-pct @(pct < 50 ? "text-green" : pct < 80 ? "text-orange" : "text-red")">
+                        @pct.ToString("F0")%
+                    </span>
+                    <span class="zone-compare-badge @(pct < 80 ? "badge-avail" : "badge-full")">
+                        @(pct < 80 ? "AVAILABLE" : "FULL")
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private OccupancyData? _occupancy;
+    private StatsData? _stats;
+    private string _wsStatus = "disconnected";
+    private string _frameUrl = "";
+    private System.Threading.Timer? _frameTimer;
+    private System.Threading.Timer? _chartTimer;
+
+    private ElementReference _chatContainer;
+    private string _chatInput = "";
+    private bool _chatLoading;
+    private readonly List<ChatMessage> _chatMessages = [];
+    private readonly List<ChatMessage> _chatHistory = [];
+
+    private double _ringDash => (_occupancy?.OccupancyPercent ?? 0) / 100.0 * 314.16;
+    private double _ringGap => 314.16 - _ringDash;
+
+    private string RingColor
+    {
+        get
+        {
+            var pct = _occupancy?.OccupancyPercent ?? 0;
+            return pct < 50 ? "#22C55E" : pct < 80 ? "#F97316" : "#EF4444";
+        }
+    }
+
+    private string PeakHourDisplay
+    {
+        get
+        {
+            if (_stats == null || _stats.PeakHour == 0) return "—";
+            var h = _stats.PeakHour % 12;
+            if (h == 0) h = 12;
+            return $"{h} {(_stats.PeakHour >= 12 ? "PM" : "AM")}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        WsService.OnOccupancyUpdate += HandleUpdate;
+        WsService.OnStatusChange += HandleStatus;
+        _wsStatus = WsService.Status;
+        _occupancy = WsService.Latest ?? await Api.GetOccupancyAsync();
+        _stats = await Api.GetStatsAsync();
+        _frameUrl = GetFrameUrl();
+
+        _frameTimer = new System.Threading.Timer(_ =>
+            InvokeAsync(() => { _frameUrl = GetFrameUrl(); StateHasChanged(); }),
+            null, 2000, 2000);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RefreshChartAsync();
+            _chartTimer = new System.Threading.Timer(async _ =>
+                await InvokeAsync(RefreshChartAsync),
+                null, 60_000, 60_000);
+        }
+    }
+
+    private async Task RefreshChartAsync()
+    {
+        var history = await Api.GetHistoryAsync(24);
+        if (!history.Any()) return;
+
+        var labels = history
+            .Select(h => DateTime.TryParse(h.Timestamp, out var dt) ? dt.ToString("HH:mm") : h.Timestamp)
+            .ToArray();
+        var occupied = history.Select(h => h.Occupied).ToArray();
+        var total = history.Select(h => h.Total).ToArray();
+
+        await JS.InvokeVoidAsync("chartInterop.renderLine", "historyChart", labels, occupied, total);
+    }
+
+    private string GetFrameUrl() =>
+        $"{Api.GetVideoFrameUrl()}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
+    private void HandleFrameError() =>
+        InvokeAsync(() => { _frameUrl = ""; StateHasChanged(); });
+
+    private void HandleUpdate(OccupancyData data) =>
+        InvokeAsync(() => { _occupancy = data; StateHasChanged(); });
+
+    private void HandleStatus(string s) =>
+        InvokeAsync(() => { _wsStatus = s; StateHasChanged(); });
+
+    private async Task SendChat()
+    {
+        if (string.IsNullOrWhiteSpace(_chatInput) || _chatLoading) return;
+
+        var msg = _chatInput.Trim();
+        _chatInput = "";
+        _chatMessages.Add(new ChatMessage { Role = "user", Content = msg });
+        _chatHistory.Add(new ChatMessage { Role = "user", Content = msg });
+        _chatLoading = true;
+        StateHasChanged();
+        await JS.InvokeVoidAsync("blazorScrollBottom", _chatContainer);
+
+        var reply = await Api.SendChatAsync(msg, _chatHistory);
+        _chatLoading = false;
+        var text = reply ?? "Sorry, I could not get a response right now.";
+        _chatMessages.Add(new ChatMessage { Role = "assistant", Content = text });
+        _chatHistory.Add(new ChatMessage { Role = "assistant", Content = text });
+        StateHasChanged();
+        await JS.InvokeVoidAsync("blazorScrollBottom", _chatContainer);
+    }
+
+    private async Task OnChatKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SendChat();
+    }
+
+    public void Dispose()
+    {
+        WsService.OnOccupancyUpdate -= HandleUpdate;
+        WsService.OnStatusChange -= HandleStatus;
+        _frameTimer?.Dispose();
+        _chartTimer?.Dispose();
+    }
+}

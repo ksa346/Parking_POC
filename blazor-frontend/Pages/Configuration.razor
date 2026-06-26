@@ -1,0 +1,288 @@
+@page "/configuration"
+@using System.ComponentModel.DataAnnotations
+@using BlazorParking.Services.State
+@inject ConfigurationState Config
+@inject EntryExitState Params
+@inject ParkingReservation reserve
+
+<div class="configuration-page">
+    <div class="configuration-grid">
+        <!--Update Lot Count (LiveCounts)-->
+        <div class="configuration-card">
+            <div class="card-header">
+                <h4>Total Lot Count</h4>
+            </div>
+            <div class="count-section">
+                <label class="section-label">Current</label>
+                <div class="vehicle-count">@Config.TotalLotCount</div>
+            </div>
+            <div class="input-section">
+                <label class="section-label">Update</label>
+                <input type="number" class="configuration-input" @bind="NewLotCount"/>
+                <button class="update-button" @onclick="UpdateLotCount">Update</button>
+            </div>
+        </div>
+
+        <!--Update General Total-->
+        <div class="configuration-card">
+            <div class="card-header">
+                <h4>General Total</h4>
+            </div>
+            <div class="count-section">
+                <label class="section-label">Current</label>
+                <div class="vehicle-count">@Config.GeneralSpots</div>
+            </div>
+            <div class="input-section">
+                <label class="section-label">Update</label>
+                <input type="number" class="configuration-input" @bind="UpdateGeneralSpots" min="0"/>
+                <button type="button" class="occupancy-button" @onclick="UpdateGeneralTotal">Update</button>
+            </div>
+        </div>
+
+        <!--Update ADA Total-->
+        <div class="configuration-card">
+            <div class="card-header">
+                <h4>ADA Total</h4>
+            </div>
+            <div class="count-section">
+                <label class="section-label">Current</label>
+                <div class="vehicle-count">@Config.AdaSpots</div>
+            </div>
+            <div class="input-section">
+                <label class="section-label">Update</label>
+                <input type="number" class="configuration-input" @bind="UpdateAdaSpots" min="0"/>
+                <button type="button" class="occupancy-button" @onclick="UpdateAdaTotal">Update</button>
+            </div>
+        </div>
+
+        <!--Update EV Total-->
+        <div class="configuration-card">
+            <div class="card-header">
+                <h4>EV Total</h4>
+            </div>
+            <div class="count-section">
+                <label class="section-label">Current</label>
+                <div class="vehicle-count">@Config.EvSpots</div>
+            </div>
+            <div class="input-section">
+                <label class="section-label">Update</label>
+                <input type="number" class="configuration-input" @bind="UpdateEvSpots" min="0"/>
+                <button type="button" class="occupancy-button" @onclick="UpdateEvTotal">Update</button>
+            </div>
+        </div>
+
+        <!--Update LiveCounts Occupancy-->
+        <div class="configuration-card">
+            <div class="card-header">
+                <h4>LiveCounts Occupancy</h4>
+            </div>
+            <div class="count-section">
+                <label class="section-label">Current</label>
+                <div class="vehicle-count">@Params.EEOccupied</div>
+            </div>
+            <div class="input-section">
+                <label class="section-label">Update</label>
+                <input type="number" class="configuration-input" @bind="UpdateOccupied" min="0" max="@Config.TotalLotCount"/>
+                <button class="occupancy-button" @onclick="UpdateOccupancy">Update</button>
+            </div>
+        </div>
+
+        <!--Reserve Parking Spot-->
+        <div class="configuration-card">
+            <div class="card-header">
+                <h4>Reserve Spots</h4>
+            </div>
+            <div class="input-section">
+                <label class="section-label">Spots</label>
+                <input type="number" class="configuration-input" @bind="SpotsToReserve" placeholder="Count"/>
+                <label class="section-label">From</label>
+                <input type="date" class="configuration-input" @bind="StartDate"/>
+                <label class="section-label">To</label>
+                <input type="date" class="configuration-input" @bind="EndDate"/>
+                <label class="section-label">Time</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="time" class="configuration-input" @bind="StartTime" style="flex: 1;"/>
+                    <input type="time" class="configuration-input" @bind="EndTime" style="flex: 1;"/>
+                </div>
+                <button class="reserve-button" @onclick="ReserveParkingSpots">Reserve</button>
+            </div>
+            @if (!string.IsNullOrEmpty(ErrorMessage)){
+                <div class="validation-message">@ErrorMessage</div>
+            }
+        </div>
+    </div>
+
+    <!--Recent Activity-->
+    <div class="configuration-card recent-activity-card">
+        <div class="card-header">
+            <h4>Recent Activity</h4>
+        </div>
+        <div class="table-container">
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Config.ActivityLogs.Any()){
+                        @foreach (var activity in Config.ActivityLogs){
+                            <tr>
+                                <td>@activity.TimeStamp.ToString("hh:mm tt")</td>
+                                <td>@activity.Type</td>
+                                <td>@activity.Details</td>
+                            </tr>
+                        }
+                    }
+                    else{
+                        <tr>
+                            <td colspan="3" class="empty-state">No recent activity available</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code{
+    private int NewLotCount;
+    private int SpotsToReserve;
+    private DateTime? StartDate;
+    private DateTime? EndDate;
+    private TimeOnly? StartTime;
+    private TimeOnly? EndTime;
+    private TimeOnly? CurrentTime => TimeOnly.FromDateTime(DateTime.Now);
+    private string ErrorMessage = string.Empty;
+    private int AvailableSpots => Config.TotalLotCount - @Params.EEOccupied;
+    private int EntryExitTotalLotCount => Config.GeneralSpots + Config.AdaSpots + Config.EvSpots;
+    private int UpdateOccupied;
+    private int UpdateGeneralSpots;
+    private int UpdateAdaSpots;
+    private int UpdateEvSpots;
+    private List<ParkingReservation> Reservations = new();
+    private int ActiveReservedSpots => Reservations.Where(r => DateTime.Now >= r.StartDate
+                                                            && CurrentTime >= r.StartTime
+                                                            && DateTime.Now <= r.EndDate
+                                                            && CurrentTime <= r.EndTime)
+                                        .Sum(r => r.ReservedSpots);
+
+    private void UpdateLotCount(){
+        if (NewLotCount < 0)
+            return;
+        Config.TotalLotCount = NewLotCount;
+        Params.CurrentAvailable = Config.TotalLotCount - Params.EEOccupied;
+        Config.ActivityLogs.Insert(0, new ActivityLog{
+            TimeStamp = DateTime.Now,
+            Type = "Count Update",
+            Details = $"Total lot count set to {Config.TotalLotCount}"
+        });
+        NewLotCount = 0;
+    }
+
+    private void UpdateGeneralTotal(){
+        if (UpdateGeneralSpots < 0)
+            return;
+        Config.GeneralSpots = UpdateGeneralSpots;
+        Params.GeneralOccupied = Math.Min(Params.GeneralOccupied, Config.GeneralSpots);
+        Params.SpotOccupied = Params.GeneralOccupied + Params.AdaOccupied + Params.EvOccupied;
+        Params.CurrentAvailable = Math.Max(0, EntryExitTotalLotCount - Params.SpotOccupied);
+        Config.ActivityLogs.Insert(0, new ActivityLog{
+            TimeStamp = DateTime.Now,
+            Type = "Count Update",
+            Details = $"General spots set to {Config.GeneralSpots}"
+        });
+        UpdateGeneralSpots = 0;
+    }
+
+    private void UpdateAdaTotal(){
+        if (UpdateAdaSpots < 0)
+            return;
+        Config.AdaSpots = UpdateAdaSpots;
+        Params.AdaOccupied = Math.Min(Params.AdaOccupied, Config.AdaSpots);
+        Params.SpotOccupied = Params.GeneralOccupied + Params.AdaOccupied + Params.EvOccupied;
+        Params.CurrentAvailable = Math.Max(0, EntryExitTotalLotCount - Params.SpotOccupied);
+        Config.ActivityLogs.Insert(0, new ActivityLog{
+            TimeStamp = DateTime.Now,
+            Type = "Count Update",
+            Details = $"ADA spots set to {Config.AdaSpots}"
+        });
+        UpdateAdaSpots = 0;
+    }
+
+    private void UpdateEvTotal(){
+        if (UpdateEvSpots < 0)
+            return;
+        Config.EvSpots = UpdateEvSpots;
+        Params.EvOccupied = Math.Min(Params.EvOccupied, Config.EvSpots);
+        Params.SpotOccupied = Params.GeneralOccupied + Params.AdaOccupied + Params.EvOccupied;
+        Params.CurrentAvailable = Math.Max(0, EntryExitTotalLotCount - Params.SpotOccupied);
+        Config.ActivityLogs.Insert(0, new ActivityLog{
+            TimeStamp = DateTime.Now,
+            Type = "Count Update",
+            Details = $"EV spots set to {Config.EvSpots}"
+        });
+        UpdateEvSpots = 0;
+    }
+
+    private void ReserveParkingSpots(){
+        ErrorMessage = string.Empty;
+        if (SpotsToReserve <= 0){
+            ErrorMessage = "Please enter spots to reserve";
+            return;
+        }
+        if (SpotsToReserve > Config.TotalLotCount){
+            ErrorMessage = "Cannot Reserve Spots more than current availability";
+            return;
+        }
+        if (StartDate == null){
+            ErrorMessage = "Please select reservation dates";
+            return;
+        }
+        if (StartDate > EndDate){
+            ErrorMessage = "Start date cannot be later than the end date";
+            return;
+        }
+        if (StartTime > EndTime){
+            ErrorMessage = "Start time cannot be later than the end time";
+            return;
+        }
+        if (StartTime == null || EndTime == null){
+            ErrorMessage = "Please select reservation times";
+            return;
+        }
+        var reservationEndDate = EndDate ?? StartDate!.Value;
+        Config.ReservedSpots += SpotsToReserve;
+        Config.ActivityLogs.Insert(0, new ActivityLog{
+            TimeStamp = DateTime.Now,
+            Type = "Parking Reservation",
+            Details = reservationEndDate == StartDate.Value ?
+                        $"{SpotsToReserve} spots reserved on " + $"{StartDate.Value:dd/MM/yyyy} "
+                            + $"from {StartTime.Value:HH:mm} " +$"to {EndTime.Value:HH:mm}"
+                        :
+                        $"{SpotsToReserve} spots reserved from " + $"{StartDate.Value:dd/MM/yyyy} to "
+                            + $"{reservationEndDate:dd/MM/yyyy} " + $"from {StartTime.Value:HH:mm} " +
+                            $"to {EndTime.Value:HH:mm}"
+        });
+        SpotsToReserve = 0;
+        StartDate = null;
+        EndDate = null;
+        StartTime = null;
+        EndTime = null;
+    }
+
+    private void UpdateOccupancy(){
+        if (UpdateOccupied < 0 || UpdateOccupied > Config.TotalLotCount)
+            return;
+        Params.EEOccupied = UpdateOccupied;
+        Params.CurrentAvailable = Math.Max(0, Config.TotalLotCount - Params.EEOccupied);
+        Config.ActivityLogs.Insert(0, new ActivityLog{
+            TimeStamp = DateTime.Now,
+            Type = "Occupancy Update",
+            Details = $"LiveCounts occupancy set to {Params.EEOccupied}"
+        });
+        UpdateOccupied = 0;
+    }
+}

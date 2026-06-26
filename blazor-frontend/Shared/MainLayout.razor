@@ -1,0 +1,148 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject GarageSelectionState GarageSelection
+
+<div class="layout">
+    <aside class="sidebar @(isSidebarOpen ? "open" : "collapsed")">
+        <NavMenu />
+    </aside>
+
+    <button type="button"
+            class="sidebar-overlay @(isSidebarOpen ? "show" : string.Empty)"
+            @onclick="ToggleSidebar"
+            aria-label="Close navigation menu">
+    </button>
+
+    <div class="content-area">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button type="button"
+                        class="menu-toggle"
+                        @onclick="ToggleSidebar"
+                        aria-label="Toggle navigation menu"
+                        aria-expanded="@isSidebarOpen">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="top-bar-icon">
+                    <img src="images/uk-parking-logo.png" alt="UK Parking logo" class="top-bar-logo-image" />
+                </div>
+                <div>
+                    <div class="top-bar-title">UK PARKING</div>
+                    <div class="top-bar-sub">INTELLIGENCE PLATFORM</div>
+                </div>
+            </div>
+
+            <div class="top-bar-center">
+                <div class="date-tile" aria-label="Current date and day">
+                    <span class="date-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M7 2v3M17 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
+                        </svg>
+                    </span>
+                    <div class="date-content">
+                        <div class="date-value">@DisplayDate</div>
+                        <div class="day-value">@DisplayDay</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="top-bar-right">
+                <span class="live-badge">Live</span>
+                <span class="live-time" aria-label="Current time">@DisplayTime</span>
+                <div class="top-bar-user" aria-label="Current user profile">
+                    <img src="images/user-profile.svg" alt="User profile" class="top-bar-user-photo" />
+                    <span class="top-bar-user-name">Admin</span>
+                </div>
+            </div>
+        </header>
+        <div class="secondary-bar" aria-label="Garage and zone filters">
+            <div class="secondary-select-group">
+                <label class="garage-select-label" for="garage-select">Garage</label>
+                <select id="garage-select"
+                        class="garage-select"
+                        value="@GarageSelection.SelectedGarage"
+                        @onchange="HandleGarageChanged"
+                        aria-label="Select garage">
+                    @foreach (var garage in GarageSelection.Garages)
+                    {
+                        <option value="@garage">@garage</option>
+                    }
+                </select>
+            </div>
+            <div class="secondary-select-group">
+                <label class="garage-select-label" for="zone-select">Zones</label>
+                <select id="zone-select"
+                        class="garage-select"
+                        value="@GarageSelection.SelectedZone"
+                        @onchange="HandleZoneChanged"
+                        aria-label="Select zone">
+                    @foreach (var zone in GarageSelection.Zones)
+                    {
+                        <option value="@zone">@zone</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <main class="page-main">
+            @Body
+        </main>
+    </div>
+</div>
+
+@code {
+    private bool isSidebarOpen = true;
+    private static readonly TimeSpan UtcMinus4 = TimeSpan.FromHours(-4.0);
+    private readonly System.Timers.Timer clockTimer = new(1000);
+    private DateTime currentDateTime = DateTime.UtcNow + UtcMinus4;
+
+    private string DisplayDate => currentDateTime.ToString("MMM dd, yyyy");
+    private string DisplayDay => currentDateTime.ToString("dddd");
+    private string DisplayTime => currentDateTime.ToString("hh:mm:ss tt");
+
+    protected override void OnInitialized()
+    {
+        currentDateTime = DateTime.UtcNow + UtcMinus4;
+        clockTimer.Elapsed += HandleClockTick;
+        clockTimer.AutoReset = true;
+        clockTimer.Start();
+        GarageSelection.OnChange += HandleGarageSelectionChanged;
+    }
+
+    private void ToggleSidebar()
+    {
+        isSidebarOpen = !isSidebarOpen;
+    }
+
+    private void HandleGarageChanged(ChangeEventArgs args)
+    {
+        GarageSelection.SetSelectedGarage(args.Value?.ToString());
+    }
+
+    private void HandleZoneChanged(ChangeEventArgs args)
+    {
+        GarageSelection.SetSelectedZone(args.Value?.ToString());
+    }
+
+    private void HandleGarageSelectionChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleClockTick(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        _ = InvokeAsync(() =>
+        {
+            currentDateTime = DateTime.UtcNow + UtcMinus4;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        clockTimer.Elapsed -= HandleClockTick;
+        clockTimer.Dispose();
+        GarageSelection.OnChange -= HandleGarageSelectionChanged;
+    }
+}

@@ -1,0 +1,545 @@
+@using BlazorParking.Services.State
+@using System.Net.WebSockets
+@using System.Text
+@using System.Text.Json
+@page "/live-counts"
+@inject EntryExitState Params
+@inject ConfigurationState config
+@inject ParkingReservation reserve
+@inject BlazorParking.Services.ParkingService Api
+@inject IWebHostEnvironment Env
+@inject IConfiguration Configuration
+@inject ILogger<LiveCounts> Logger
+@implements IAsyncDisposable
+
+<PageTitle>Entry / Exit Counter — Cornerstone Garage</PageTitle>
+
+@* <div class="page-header">
+    <div>
+        <h1 class="page-title">Entry / Exit Counter</h1>
+        <p class="page-subtitle">University of Kentucky &bull; Tripwire-based vehicle counting</p>
+    </div>
+    <span class="status-badge @(_running ? "badge-live" : "badge-offline")">
+        @(_running ? "● Processing…" : "○ Idle")
+    </span>
+</div> *@
+
+<!-- KPI Cards -->
+<div class="kpi-cards-container">
+    <!-- Total Parking Spaces Card -->
+    <div class="kpi-card kpi-card-total">
+        <div class="kpi-header" style="background-color: #0033A0;">
+            <div class="kpi-icon">🅿️</div>
+            <div class="kpi-badge">Garage Capacity</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@config.TotalLotCount</div>
+            <div class="kpi-title">Total Parking Spaces</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #0033A0; width: 100%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Configured Capacity</div>
+                <div class="kpi-footer-right">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Availability Card -->
+    <div class="kpi-card kpi-card-general">
+        <div class="kpi-header" style="background-color: #1A7F37;">
+            <div class="kpi-icon">✅</div>
+            <div class="kpi-badge">@Percent(LiveAvailable, config.TotalLotCount)%</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@LiveAvailable</div>
+            <div class="kpi-title">Available Spaces</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #1A7F37; width: @Percent(LiveAvailable, config.TotalLotCount)%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Available/Total</div>
+                <div class="kpi-footer-right">@LiveAvailable / @config.TotalLotCount</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Occupied Card -->
+    <div class="kpi-card kpi-card-ada">
+        <div class="kpi-header" style="background-color: #B42318;">
+            <div class="kpi-icon">🚗</div>
+            <div class="kpi-badge">@Percent(LiveOccupied, config.TotalLotCount)%</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@LiveOccupied</div>
+            <div class="kpi-title">Occupied Spaces</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #B42318; width: @Percent(LiveOccupied, config.TotalLotCount)%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Occupied/Total</div>
+                <div class="kpi-footer-right">@LiveOccupied / @config.TotalLotCount</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reserved Parking Card -->
+    <div class="kpi-card kpi-card-reserved">
+        <div class="kpi-header" style="background-color: #6366F1;">
+            <div class="kpi-icon">🔒</div>
+            <div class="kpi-badge">Reserved Allocation</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@config.ReservedSpots</div>
+            <div class="kpi-title">Reserved Spaces</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #6366F1; width: @Percent(config.ReservedSpots, config.TotalLotCount)%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Reserved/Total</div>
+                <div class="kpi-footer-right">@config.ReservedSpots / @config.TotalLotCount</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* <div class="card mt-4 mb-4">
+    <div class="card-header">
+        <h3 class="card-title">PROCESSED VIDEOS</h3>
+    </div>
+    <div class="processed-videos-grid">
+        <div class="processed-video-panel">
+            <div class="processed-video-title">Entry Feed</div>
+            @if (!string.IsNullOrWhiteSpace(Params.ProcessedEntryVideoUrl))
+            {
+                <div class="processed-video-overlay-container">
+                    <video class="processed-video-player" controls preload="metadata" src="@Params.ProcessedEntryVideoUrl"></video>
+                    <div class="processed-video-annotation processed-video-annotation-entry">Entry</div>
+                    <div class="processed-video-camera-name">Level 2 East. Entry Point</div>
+                </div> *@
+                @* @if (!string.IsNullOrWhiteSpace(Params.ProcessedEntryVideoFileName))
+                {
+                    <div class="processed-video-path">@Params.ProcessedEntryVideoFileName</div>
+                } *@
+            @* }
+            else
+            {
+                <div class="processed-video-empty">Run analysis to generate the entry processed video.</div>
+            }
+        </div>
+
+        <div class="processed-video-panel">
+            <div class="processed-video-title">Exit Feed</div>
+            @if (!string.IsNullOrWhiteSpace(Params.ProcessedExitVideoUrl))
+            {
+                <div class="processed-video-overlay-container">
+                    <video class="processed-video-player" controls preload="metadata" src="@Params.ProcessedExitVideoUrl"></video>
+                    <div class="processed-video-annotation processed-video-annotation-exit">Exit</div>
+                    <div class="processed-video-camera-name">Level 2 East. Exit Point</div>
+                </div> *@
+                @* @if (!string.IsNullOrWhiteSpace(Params.ProcessedExitVideoFileName))
+                {
+                    <div class="processed-video-path">@Params.ProcessedExitVideoFileName</div>
+                } *@
+            @* }
+            else
+            {
+                <div class="processed-video-empty">Run analysis to generate the exit processed video.</div>
+            }
+        </div>
+    </div> *@
+    @* @if (!string.IsNullOrWhiteSpace(_processedOutputDir))
+    {
+        <div class="processed-output-dir">Output folder: @_processedOutputDir</div>
+    } *@
+@* </div> *@
+
+
+<!-- Run History Table -->
+@* <div class="card mt-4">
+    <div class="card-header">
+        <h3 class="card-title">RUN HISTORY</h3>
+        <button class="btn-reset" @onclick="ClearHistory">Clear</button>
+    </div>
+    <table class="activity-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Time</th>
+                <th>Frame</th>
+                <th>Count</th>
+                <th>Validation</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in _validations.AsEnumerable().Reverse())
+            {
+                <tr>
+                    <td class="text-muted text-mono">@item.Id</td>
+                    <td class="text-muted">@item.Time.ToString("h:mm:ss tt")</td>
+                    <td><button class="frame-link"
+                        @onclick="()=>SelectFrame(item)">@item.Frame</button>
+                    </td>
+                    <td class="fw-600 @(item.Count > 0 ? "text-green" : "text-red")">
+                        @(item.Count > 0 ? $"+{item.Count}" : item.Count.ToString())</td>
+                    <td>
+                        <div class="validation-buttons">
+                            <button class="validation-btn approve-btn
+                            @(item.ValidationStatus == "Approved" ? "btn-selected-approve" : "")"
+                            @onclick="() => Approve(item.Id)">👍</button>
+                            <button class="validation-btn reject-btn
+                            @(item.ValidationStatus == "Rejected" ? "btn-selected-reject" : "")"
+                            @onclick="() => Reject(item.Id)">👎</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+            @if (!_validations.Any())
+            {
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-3">
+                        Run an analysis to see results…
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div> *@
+
+@if (_selectedDetection is not null){
+    <div class="card mt-4">
+        <div class="card-header">
+            <h3 class="card-title">PHOTO ANALYSIS</h3>
+        </div>
+
+        <div class="photo-analysis-container">
+            <div class="photo-details">
+                <div class="analysis-row">
+                    <span class="analysis-value">@_selectedDetection.Frame</span>
+                </div>
+                <div class="analysis-row">
+                    <span class="analysis-label">Detection</span>
+                    <span class="analysis-value">#@_selectedDetection.Id</span>
+                </div>
+                <div class="analysis-row">
+                    <span class="analysis-value">@_selectedDetection.Time.ToString("h:mm:ss tt")</span>
+                </div>
+            </div>
+            <div class="analysis-image-section">
+                @if (!string.IsNullOrWhiteSpace(_selectedDetection.FileName)){
+                    <img src="@($"/entry-exit-images/{_selectedDetection.FileName}")"
+                        class="analysis-image" alt="Detection Frame"/>
+                    @* <div>URL: /entry-exit-images/@_selectedDetection.FileName</div> *@
+                }
+            </div>
+            <div class="detection-status-box
+                    @(_selectedDetection.DetectionType == "Entry" ? "entry-status" : "exit-status")">
+                <div class="detection-title">
+                    @(_selectedDetection.DetectionType == "Entry" ? "ENTRY DETECTED" : "EXIT DETECTED")
+                </div>
+                <div class="detection-count">
+                    @(_selectedDetection.DetectionType == "Entry" ? "+1" : "-1")
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="source-msg msg-err">✕ @_errorMessage</div>
+}
+@if (!string.IsNullOrEmpty(_statusMessage))
+{
+    <div class="source-msg" style="color:#17a2b8;">ℹ @_statusMessage</div>
+}
+
+@code {
+    private bool _running;
+    private string _errorMessage = "";
+    private string _statusMessage = "";
+    private string _processedOutputDir = "";
+    private int _available;
+    private ValidationRecord? _selectedDetection;
+
+    private List<ValidationRecord> _validations = [];
+    private List<string> imageFiles = new();
+    private string FixedEntryRtspUrl => Configuration["CameraFeeds:Entry"]?.Trim() ?? string.Empty;
+    private string FixedExitRtspUrl => Configuration["CameraFeeds:Exit"]?.Trim() ?? string.Empty;
+
+    private string BuildMjpegUrl(string? rtspUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rtspUrl))
+            return "";
+
+        var backendUrl = Configuration["BackendUrl"]?.Trim();
+
+        if (string.IsNullOrWhiteSpace(backendUrl))
+            return "";
+
+        return $"{backendUrl.TrimEnd('/')}/api/v1/stream/mjpeg?url={Uri.EscapeDataString(rtspUrl)}&fps=10";
+    }
+
+    private int LiveOccupied => Math.Clamp(Params.EEOccupied, 0, config.TotalLotCount);
+    private int LiveAvailable => Math.Max(0, config.TotalLotCount - LiveOccupied);
+
+    private static int Percent(int available, int total) =>
+        total <= 0 ? 0 : (int)Math.Round((decimal)available / total * 100M);
+
+    protected override void OnInitialized()
+    {
+        Params.EntryVideoPath = FixedEntryRtspUrl;
+        Params.ExitVideoPath = FixedExitRtspUrl;
+        Params.CurrentAvailable = Math.Max(0, config.TotalLotCount - Params.EEOccupied);
+        // Restore validation history from state
+        _validations = new List<ValidationRecord>(Params.Validations);
+        imageFiles = new List<string>(Params.ImageFiles);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _running)
+            return;
+
+        await StartLive();
+    }
+
+    private ClientWebSocket? _ws;
+    private CancellationTokenSource? _wsCts;
+
+    private async Task StartLive()
+    {
+        _errorMessage = "";
+        _statusMessage = "Connecting to live streams…";
+        _running = true;
+        StateHasChanged();
+
+        try
+        {
+            _wsCts = new CancellationTokenSource();
+            _ws = new ClientWebSocket();
+
+            var backendUrl = Configuration["BackendUrl"]?.Trim();
+            if (string.IsNullOrWhiteSpace(backendUrl))
+            {
+                _errorMessage = "BackendUrl not configured";
+                _running = false;
+                StateHasChanged();
+                return;
+            }
+            var wsUrl = backendUrl.TrimEnd('/').Replace("http://", "ws://").Replace("https://", "wss://")
+                        + "/api/ws/live-entry-exit-counts";
+
+            await _ws.ConnectAsync(new Uri(wsUrl), _wsCts.Token);
+
+            var modelPath = Configuration["EntryExitModelPath"] ?? "yolo_trained.pt";
+            var cfg = new Dictionary<string, object?>
+            {
+                ["entry_url"] = (Params.EntryVideoPath ?? string.Empty).Trim(),
+                ["exit_url"]  = (Params.ExitVideoPath ?? string.Empty).Trim(),
+                ["confidence_threshold"] = Params.Confidence,
+                ["model_path"] = modelPath,
+                ["interval_seconds"] = 1,
+                ["tick_seconds"] = 1,
+                ["max_stale_frames"] = 40,
+                ["max_match_distance_px"] = 150.0,
+                ["save_annotated_frames"] = true,
+            };
+
+            var cfgJson = JsonSerializer.Serialize(cfg);
+            await _ws.SendAsync(Encoding.UTF8.GetBytes(cfgJson), WebSocketMessageType.Text, true, _wsCts.Token);
+
+            _statusMessage = "● Live — counting vehicles…";
+            StateHasChanged();
+
+            _ = Task.Run(async () =>
+            {
+                var buf = new byte[8192];
+                try
+                {
+                    while (_ws.State == WebSocketState.Open && !_wsCts.IsCancellationRequested)
+                    {
+                        var payload = new StringBuilder();
+                        WebSocketReceiveResult? result;
+                        do
+                        {
+                            result = await _ws.ReceiveAsync(buf, _wsCts.Token);
+                            if (result.MessageType == WebSocketMessageType.Close)
+                                break;
+                            payload.Append(Encoding.UTF8.GetString(buf, 0, result.Count));
+                        }
+                        while (!result.EndOfMessage);
+
+                        if (result?.MessageType == WebSocketMessageType.Close)
+                            break;
+                        if (payload.Length == 0)
+                            continue;
+
+                        var rawMessage = payload.ToString();
+                        Logger.LogInformation("Raw WebSocket response: {RawMessage}", rawMessage);
+ 
+                        var msg = JsonSerializer.Deserialize<JsonElement>(rawMessage);
+                        var evt = msg.TryGetProperty("event", out var evtProp) ? evtProp.GetString() : "";
+
+                        if (evt == "count")
+                        {
+                            var prevEntered = Params.TotalEntered;
+                            var prevExited = Params.TotalExited;
+                            var nextEntered = msg.TryGetProperty("entered_count", out var e) ? e.GetInt32() : prevEntered;
+                            var nextExited  = msg.TryGetProperty("exited_count",  out var x) ? x.GetInt32() : prevExited;
+
+                            var delta = (nextEntered - prevEntered) - (nextExited - prevExited);
+
+                            Params.TotalEntered = nextEntered;
+                            Params.TotalExited  = nextExited;
+                            Params.NetChange    = nextEntered - nextExited;
+                            Params.EEOccupied     = Math.Max(0, Params.EEOccupied + delta);
+                            Params.CurrentAvailable = Math.Max(0, config.TotalLotCount - Params.EEOccupied);
+                            
+                            // Extract evidence directory paths
+                            if (msg.TryGetProperty("entry_evidence_dir", out var entryDir))
+                            {
+                                Params.EntryEvidenceDir = entryDir.GetString();
+                                Logger.LogInformation("WebSocket entry evidence dir set to: {EntryEvidenceDir}", Params.EntryEvidenceDir);
+                            }
+                            if (msg.TryGetProperty("exit_evidence_dir", out var exitDir))
+                            {
+                                Params.ExitEvidenceDir = exitDir.GetString();
+                                Logger.LogInformation("WebSocket exit evidence dir set to: {ExitEvidenceDir}", Params.ExitEvidenceDir);
+                            }
+                            
+                            await InvokeAsync(StateHasChanged);
+                        }
+                        else if (evt == "warning")
+                        {
+                            var stream = msg.TryGetProperty("stream", out var s) ? s.GetString() : null;
+                            var warnMsg = msg.TryGetProperty("message", out var w) ? w.GetString() : "Waiting for stream frames...";
+                            await InvokeAsync(() =>
+                            {
+                                var source = string.IsNullOrWhiteSpace(stream) ? "Stream" : stream;
+                                _statusMessage = $"{source}: {warnMsg ?? "Waiting for stream frames..."}";
+                                StateHasChanged();
+                            });
+                        }
+                        else if (evt == "started")
+                        {
+                            await InvokeAsync(() => { _statusMessage = "● Live — counting vehicles…"; StateHasChanged(); });
+                        }
+                        else if (evt == "error")
+                        {
+                            var errMsg = msg.TryGetProperty("message", out var m) ? m.GetString() : "Unknown error";
+                            await InvokeAsync(() => { _errorMessage = errMsg ?? ""; _running = false; StateHasChanged(); });
+                            break;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    await InvokeAsync(() => { _errorMessage = ex.Message; _running = false; StateHasChanged(); });
+                }
+                finally
+                {
+                    await InvokeAsync(() => { _running = false; _statusMessage = "Stream stopped."; StateHasChanged(); });
+                }
+            }, _wsCts.Token);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+            _statusMessage = "";
+            _running = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopLive()
+    {
+        _wsCts?.Cancel();
+        if (_ws?.State == WebSocketState.Open)
+        {
+            try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "User stopped", CancellationToken.None); }
+            catch { }
+        }
+        _running = false;
+        _statusMessage = "Stopped.";
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _wsCts?.Cancel();
+        if (_ws is not null)
+        {
+            try { if (_ws.State == WebSocketState.Open) await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); }
+            catch { }
+            _ws.Dispose();
+        }
+        _wsCts?.Dispose();
+    }
+
+    private void ClearHistory()
+    {
+        _validations.Clear();
+        _selectedDetection = null;
+        Params.TotalEntered = 0;
+        Params.TotalExited  = 0;
+        Params.NetChange    = 0;
+        Params.EEOccupied = 0;
+        Params.ProcessedEntryVideoFileName = "";
+        Params.ProcessedExitVideoFileName = "";
+        Params.ProcessedEntryVideoUrl = "";
+        Params.ProcessedExitVideoUrl = "";
+        _processedOutputDir = "";
+        _statusMessage = "";
+        _errorMessage  = "";
+        // Clear state as well
+        Params.Validations.Clear();
+        Params.ImageFiles.Clear();
+        imageFiles.Clear();
+        StateHasChanged();
+    }
+
+    private static string ToUiVideoUrl(string? relativeUrl)
+    {
+        if (string.IsNullOrWhiteSpace(relativeUrl))
+            return "";
+        // Add a cache buster so each new run refreshes the video element immediately.
+        return $"{relativeUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+    }
+
+    private void Approve(int id){
+        var item = _validations.FirstOrDefault(x => x.Id == id);
+        if(item is not null){
+            var index = _validations.IndexOf(item);
+            _validations[index] = item with{
+                ValidationStatus = "Approved"
+            };
+            // Sync back to state
+            Params.Validations = new List<ValidationRecord>(_validations);
+            StateHasChanged();
+        };
+    }
+
+    private void Reject(int id){
+        var item = _validations.FirstOrDefault(x => x.Id == id);
+        if(item is not null){
+            var index = _validations.IndexOf(item);
+            _validations[index] = item with{
+                ValidationStatus = "Rejected"
+            };
+            // Sync back to state
+            Params.Validations = new List<ValidationRecord>(_validations);
+            StateHasChanged();
+        };
+    }
+
+    private void SelectFrame(ValidationRecord item){
+        if (_selectedDetection?.Id == item.Id){
+            _selectedDetection = null;
+            return;
+        }
+        _selectedDetection = item;
+    }
+}

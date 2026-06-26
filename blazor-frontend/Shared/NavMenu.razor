@@ -1,0 +1,43 @@
+@implements IDisposable
+@inject GarageSelectionState GarageSelection
+
+<nav class="nav-menu">
+    <div class="nav-section-label">@GarageSelection.SelectedGarage.ToUpperInvariant()</div>
+    <NavLink href="/" Match="NavLinkMatch.All" class="nav-item">
+        <span class="nav-icon">⊞</span>
+        <span>Spot Detection</span>
+    </NavLink>
+    @* <NavLink href="/dashboard" class="nav-item">
+        <span class="nav-icon">◉</span>
+        <span>Live Dashboard</span>
+    </NavLink> *@
+    <NavLink href="/live-counts" class="nav-item">
+        <span class="nav-icon">⊙</span>
+        <span>Entry / Exit Counter</span>
+    </NavLink>
+    <NavLink href="/detection-evidence" class="nav-item">
+        <span class="nav-icon">⊙</span>
+        <span>Detection Evidence</span>
+    </NavLink>
+    <NavLink href="/configuration" class="nav-item">
+        <span class="nav-icon">⨶</span>
+        <span>Configuration</span>
+    </NavLink>
+</nav>
+
+@code {
+    protected override void OnInitialized()
+    {
+        GarageSelection.OnChange += HandleGarageSelectionChanged;
+    }
+
+    private void HandleGarageSelectionChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        GarageSelection.OnChange -= HandleGarageSelectionChanged;
+    }
+}

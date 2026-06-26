@@ -1,0 +1,73 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage/
+
+# Node
+node_modules/
+ui/node_modules/
+dist/
+build/
+.npm/
+.yarn/
+
+# Testing
+tests/
+*.spec.ts
+*.test.ts
+*.test.js
+*.spec.js
+test-results/
+.playwright/
+playwright-report/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Environment & Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Docker (don't include in build context)
+Dockerfile*
+docker-compose*.yml
+
+# Documentation
+*.md
+
+# Scripts
+*.bat
+*.ps1
+*.sh
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Storage (runtime data shouldn't be baked in)
+storage/
+
+# Temp files
+temp/
+*.log

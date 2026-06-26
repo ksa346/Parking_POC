@@ -1,0 +1,86 @@
+services:
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: parking-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./backend/app:/app/app
+      - ./Parking_Lot_Video.mp4:/app/video/Parking_Lot_Video.mp4
+      - ./backend/data/uploads:/app/video/uploads
+    networks:
+      - home
+
+  # Vite React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: parking-frontend
+    restart: unless-stopped
+    ports:
+      - "4173:4173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000/api/v1
+    depends_on:
+      - backend
+    networks:
+      - home
+
+  # ── YOLOv8 Fine-Tuning ────────────────────────────────────────────────────
+  # Usage:
+  #   1. Export your dataset from the YOLO Dataset Tool (Downloads a .zip)
+  #   2. Unzip it to  ./training/dataset/
+  #   3. Run:  docker compose run --rm train
+  #
+  # Override any hyperparameter with -e, e.g.:
+  #   docker compose run --rm -e EPOCHS=100 -e DEVICE=0 train
+  #
+  # Trained weights land in ./training/runs/<PROJECT_NAME>/<RUN_NAME>/weights/
+  # Copy best.pt → backend/best.pt and set YOLO_MODEL_PATH=best.pt in backend/.env
+  train:
+    build:
+      context: ./training
+      dockerfile: Dockerfile
+    image: parking-yolo-train
+    container_name: parking-train
+    profiles:
+      - train          # only starts when you explicitly request it
+    environment:
+      MODEL_NAME:    ${MODEL_NAME:-yolov8m.pt}
+      EPOCHS:        ${EPOCHS:-50}
+      BATCH_SIZE:    ${BATCH_SIZE:-16}
+      IMG_SIZE:      ${IMG_SIZE:-640}
+      LR0:           ${LR0:-0.01}
+      PATIENCE:      ${PATIENCE:-10}
+      DEVICE:        ${DEVICE:-cpu}
+      PROJECT_NAME:  ${PROJECT_NAME:-parking_finetune}
+      RUN_NAME:      ${RUN_NAME:-run1}
+    volumes:
+      # Mount your extracted dataset zip here before running
+      - ./training/dataset:/workspace/dataset:ro
+      # Trained weights are written here and persist after the container exits
+      - ./training/runs:/workspace/runs
+    # Uncomment to use a GPU (requires nvidia-container-toolkit on the host)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    networks:
+      - home
+
+networks:
+  home:
+    name: home
+    external: true

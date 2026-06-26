@@ -1,0 +1,446 @@
+@using BlazorParking.Services.State
+@using BlazorParking.Services
+@page "/"
+@implements IDisposable
+@inject OccupancyWebSocketService WsService
+@inject EntryExitState Params
+@inject ConfigurationState config
+@inject IConfiguration Configuration
+@inject ParkingService Api
+@inject ILogger<EntryExit> Logger
+
+<PageTitle>Car Detection — Cornerstone Garage</PageTitle>
+
+<!-- KPI Cards -->
+<div class="kpi-cards-container">
+    <div class="kpi-card kpi-card-total">
+        <div class="kpi-header" style="background-color: #0033A0;">
+            <div class="kpi-icon">🅿️</div>
+            <div class="kpi-badge">Garage Capacity</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@EntryExitTotalLotCount</div>
+            <div class="kpi-title">Total Parking Spaces (General + ADA + EV)</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #0033A0; width: 100%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Available/Total</div>
+                <div class="kpi-footer-right">@CurrentAvailable / @EntryExitTotalLotCount</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="kpi-card kpi-card-general">
+        <div class="kpi-header" style="background-color: #1A7F37;">
+            <div class="kpi-icon">🅿️</div>
+            <div class="kpi-badge">@(config.GeneralSpots > 0 ? (int)Math.Round((decimal)(config.GeneralSpots - Params.GeneralOccupied) / config.GeneralSpots * 100) : 0)%</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@(config.GeneralSpots - Params.GeneralOccupied)</div>
+            <div class="kpi-title">General Spaces Available</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #1A7F37; width: @(config.GeneralSpots > 0 ? (int)Math.Round((decimal)(config.GeneralSpots - Params.GeneralOccupied) / config.GeneralSpots * 100) : 0)%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Available/Total</div>
+                <div class="kpi-footer-right">@(config.GeneralSpots - Params.GeneralOccupied) / @config.GeneralSpots</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="kpi-card kpi-card-ada">
+        <div class="kpi-header" style="background-color: #0055CC;">
+            <div class="kpi-icon">♿</div>
+            <div class="kpi-badge">@(config.AdaSpots > 0 ? (int)Math.Round((decimal)(config.AdaSpots - Params.AdaOccupied) / config.AdaSpots * 100) : 0)%</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@(config.AdaSpots - Params.AdaOccupied)</div>
+            <div class="kpi-title">ADA Spaces Available</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #0055CC; width: @(config.AdaSpots > 0 ? (int)Math.Round((decimal)(config.AdaSpots - Params.AdaOccupied) / config.AdaSpots * 100) : 0)%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Available/Total</div>
+                <div class="kpi-footer-right">@(config.AdaSpots - Params.AdaOccupied) / @config.AdaSpots</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="kpi-card kpi-card-ev">
+        <div class="kpi-header" style="background-color: #166534;">
+            <div class="kpi-icon">🔌</div>
+            <div class="kpi-badge">@(config.EvSpots > 0 ? (int)Math.Round((decimal)(config.EvSpots - Params.EvOccupied) / config.EvSpots * 100) : 0)%</div>
+        </div>
+        <div class="kpi-content">
+            <div class="kpi-number">@(config.EvSpots - Params.EvOccupied)</div>
+            <div class="kpi-title">EV Charging Spaces Available</div>
+            <div class="kpi-bar-container">
+                <div class="kpi-bar" style="background-color: #166534; width: @(config.EvSpots > 0 ? (int)Math.Round((decimal)(config.EvSpots - Params.EvOccupied) / config.EvSpots * 100) : 0)%;"></div>
+            </div>
+            <div class="kpi-footer">
+                <div class="kpi-footer-left">Available/Total</div>
+                <div class="kpi-footer-right">@(config.EvSpots - Params.EvOccupied) / @config.EvSpots</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* <!-- Occupancy Bar -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h3 class="card-title">OCCUPANCY LEVEL</h3>
+        <button class="btn-reset" @onclick="ResetCounters">Reset Counters</button>
+    </div>
+    <div class="occ-bar-section">
+        <div class="occ-bar-wrap">
+            <div class="occ-bar">
+                <div class="occ-bar-fill @OccupancyColorClass"
+                     style="width: @(Math.Min(CurrentOccupancyPercent, 100))%;"></div>
+            </div>
+            <span class="occ-bar-pct">@CurrentOccupancyPercent.ToString("F1")%</span>
+        </div>
+        <div class="occ-bar-labels">
+            <span>0%</span>
+            <span class="threshold-label">50%</span>
+            <span>100%</span>
+        </div>
+    </div>
+    <div class="last-updated">Last updated: @_lastUpdated</div>
+</div> *@
+
+<!-- Zone Breakdown (if zones available) -->
+@* @if (_occupancy?.Zones.Count > 0)
+{
+    <div class="card mt-4">
+        <div class="card-header">
+            <h3 class="card-title">ZONE BREAKDOWN</h3>
+        </div>
+        <div class="zone-list">
+            @foreach (var zone in _occupancy.Zones)
+            {
+                var pct = zone.Total > 0 ? (double)zone.Occupied / zone.Total * 100 : 0;
+                <div class="zone-row">
+                    <span class="zone-name">Zone @zone.ZoneId</span>
+                    <div class="zone-bar-wrap">
+                        <div class="zone-bar">
+                            <div class="zone-bar-fill" style="width: @pct.ToString("F0")%;"></div>
+                        </div>
+                    </div>
+                    <span class="zone-stat">@zone.Occupied / @zone.Total</span>
+                    <span class="zone-pct @(pct < 50 ? "text-green" : pct < 80 ? "text-orange" : "text-red")">
+                        @pct.ToString("F0")%
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+} *@
+
+<!-- Recent Activity -->
+@* <div class="card mt-4">
+    <div class="card-header">
+        <h3 class="card-title">RECENT ACTIVITY</h3>
+        <span class="record-count">@_events.Count events</span>
+    </div>
+    <table class="activity-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Event</th>
+                <th>Count</th>
+                <th>Available After</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var evt in _events.AsEnumerable().Reverse().Take(12))
+            {
+                <tr>
+                    <td class="text-muted">@evt.Time.ToString("h:mm:ss tt")</td>
+                    <td>
+                        <span class="event-badge @(evt.Type == "entry" ? "badge-entry" : "badge-exit")">
+                            @(evt.Type == "entry" ? "▲ Car In" : "▼ Car Out")
+                        </span>
+                    </td>
+                    <td class="text-mono">+@evt.Delta</td>
+                    <td class="text-mono fw-600">@evt.Available</td>
+                </tr>
+            }
+            @if (!_events.Any())
+            {
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-3">
+                        Waiting for vehicle activity...
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div> *@
+
+@code {
+    // ── RTSP feed URLs ──
+    private string FixedAdaRtspUrl => Configuration["CameraFeeds:Ada"]?.Trim() ?? string.Empty;
+    private string FixedEvRtspUrl => Configuration["CameraFeeds:Ev"]?.Trim() ?? string.Empty;
+    private string FixedGeneralRtspUrl => Configuration["CameraFeeds:General"]?.Trim() ?? string.Empty;
+
+    // ── Stream IDs expected by the POST API request/response keys ──
+    private const string StreamIdGeneral = "cam_01";
+    private const string StreamIdAda = "cam_02";
+    private const string StreamIdEv = "cam_03";
+
+    private static readonly List<int[]> Cam01RegionLeft =
+    [
+        [0, 1053],
+        [760, 349],
+        [571, 290],
+        [0, 540],
+    ];
+ 
+    private static readonly List<int[]> Cam01RegionRight =
+    [
+        [1920, 972],
+        [1100, 369],
+        [1350, 250],
+        [1920, 400],
+    ];
+ 
+    private static readonly List<int[]> Cam02RegionLeft =
+    [
+        [59, 1078],
+        [708, 234],
+        [436, 160],
+        [34, 389],
+    ];
+ 
+    private static readonly List<int[]> Cam02RegionRight =
+    [
+        [1967, 1071],
+        [1126, 227],
+        [1401, 178],
+        [1974, 349],
+    ];
+ 
+    private static readonly List<int[]> Cam03RegionLeft =
+    [
+        [84, 1078],
+        [800, 155],
+        [514, 72],
+        [34, 356],
+        [93, 1067],
+    ];
+ 
+    private static readonly List<int[]> Cam03RegionRight =
+    [
+        [1948, 1076],
+        [1130, 170],
+        [1324, 60],
+        [1977, 360],
+        [1977, 1069],
+    ];
+
+    // ── KPI polling timer ──
+    private Timer? _kpiTimer;
+
+
+    private string BuildMjpegUrl(string? rtspUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rtspUrl))
+            return "";
+
+        var backendUrl = Configuration["BackendUrl"]?.Trim();
+
+        if (string.IsNullOrWhiteSpace(backendUrl))
+            return "";
+
+        return $"{backendUrl.TrimEnd('/')}/api/v1/stream/mjpeg?url={Uri.EscapeDataString(rtspUrl)}&fps=10";
+    }
+
+    // ── Occupancy state ──
+    private OccupancyData? _occupancy;
+    private string _wsStatus = "disconnected";
+    private int _totalEntered;
+    private int _totalExited;
+    private int _prevOccupied = -1;
+    private string _lastUpdated = "—";
+    private bool _usingSampledCounts;
+    private record ActivityEvent(DateTime Time, string Type, int Delta, int Available);
+    private readonly List<ActivityEvent> _events = [];
+
+    private string OccupancyColorClass
+    {
+        get
+        {
+            var pct = CurrentOccupancyPercent;
+            return pct < 50 ? "fill-green" : pct < 80 ? "fill-orange" : "fill-red";
+        }
+    }
+
+    private int EntryExitTotalLotCount => config.GeneralSpots + config.AdaSpots + config.EvSpots;
+    private int CurrentTotal => _occupancy?.TotalSpots ?? EntryExitTotalLotCount;
+    private int CurrentOccupied => Params.SpotOccupied;
+    private int CurrentAvailable => Math.Max(0, EntryExitTotalLotCount - Params.SpotOccupied);
+    private double CurrentOccupancyPercent =>
+        EntryExitTotalLotCount > 0 ? ((double)Params.SpotOccupied / EntryExitTotalLotCount) * 100.0 : 0.0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _wsStatus = "disconnected";
+
+        // Initial fetch on load, then repeat every 60 seconds.
+        await FetchCameraOccupancyAsync();
+        _kpiTimer = new Timer(
+            async _ => await InvokeAsync(FetchCameraOccupancyAsync),
+            null,
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromMinutes(1));
+    }
+
+    private async Task FetchCameraOccupancyAsync()
+    {
+        var request = new LiveCountsRequest
+        {
+            Streams =
+            [
+                new LiveCountStreamRequest
+                {
+                    StreamId = StreamIdGeneral,
+                    Source = FixedGeneralRtspUrl,
+                    Conf = 0.5,
+                    Iou = 0.45,
+                    Regions = new LiveCountRegions
+                    {
+                        RegionLeft = Cam01RegionLeft,
+                        RegionRight = Cam01RegionRight,
+                    }
+                },
+                new LiveCountStreamRequest
+                {
+                    StreamId = StreamIdAda,
+                    Source = FixedAdaRtspUrl,
+                    Conf = 0.5,
+                    Iou = 0.45,
+                    Regions = new LiveCountRegions
+                    {
+                        RegionLeft = Cam02RegionLeft,
+                        RegionRight = Cam02RegionRight,
+                    }
+                },
+                new LiveCountStreamRequest
+                {
+                    StreamId = StreamIdEv,
+                    Source = FixedEvRtspUrl,
+                    Conf = 0.5,
+                    Iou = 0.45,
+                    Regions = new LiveCountRegions
+                    {
+                        RegionLeft = Cam03RegionLeft,
+                        RegionRight = Cam03RegionRight,
+                    }
+                },
+            ]
+        };
+
+        var result = await Api.GetCameraOccupancyAsync(request);
+        if (result is null)
+        {
+            Logger.LogWarning("Live-counts API returned null result.");
+            return;
+        }
+
+        Logger.LogInformation(
+            "Live-counts API response: {Counts}",
+            string.Join(", ", result.Select(kvp => $"{kvp.Key}={kvp.Value}")));
+
+        if (TryGetCount(result, StreamIdGeneral) is { } generalOccupied)
+            Params.GeneralOccupied = generalOccupied;
+
+        if (TryGetCount(result, StreamIdAda) is { } adaOccupied)
+            Params.AdaOccupied = adaOccupied;
+
+        if (TryGetCount(result, StreamIdEv) is { } evOccupied)
+            Params.EvOccupied = evOccupied;
+
+        Params.SpotOccupied = Params.GeneralOccupied + Params.AdaOccupied + Params.EvOccupied;
+        Params.CurrentAvailable = Math.Max(0, EntryExitTotalLotCount - Params.SpotOccupied);
+
+        Logger.LogInformation(
+            "Applied occupancy counts: general={General}, ada={Ada}, ev={Ev}, total={Total}, available={Available}",
+            Params.GeneralOccupied,
+            Params.AdaOccupied,
+            Params.EvOccupied,
+            Params.SpotOccupied,
+            Params.CurrentAvailable);
+
+        StateHasChanged();
+    }
+
+    private static int? TryGetCount(Dictionary<string, int> result, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (result.TryGetValue(key, out var value))
+                return value;
+        }
+
+        return null;
+    }
+
+    private void HandleUpdate(OccupancyData data)
+    {
+        InvokeAsync(() =>
+        {
+            if (_prevOccupied >= 0)
+            {
+                if (!_usingSampledCounts)
+                {
+                    var delta = data.OccupiedSpots - _prevOccupied;
+                    if (delta > 0)
+                    {
+                        _totalEntered += delta;
+                        _events.Add(new ActivityEvent(DateTime.Now, "entry", delta, data.AvailableSpots));
+                    }
+                    else if (delta < 0)
+                    {
+                        _totalExited += Math.Abs(delta);
+                        _events.Add(new ActivityEvent(DateTime.Now, "exit", Math.Abs(delta), data.AvailableSpots));
+                    }
+                }
+            }
+
+            _prevOccupied = data.OccupiedSpots;
+            _occupancy = data;
+            if (!_usingSampledCounts)
+            {
+                Params.SpotOccupied = data.OccupiedSpots;
+                Params.CurrentAvailable = Math.Max(0, EntryExitTotalLotCount - data.OccupiedSpots);
+            }
+            _lastUpdated = DateTime.Now.ToString("h:mm:ss tt");
+            StateHasChanged();
+        });
+    }
+
+    private void HandleStatus(string status) =>
+        InvokeAsync(() => { _wsStatus = status; StateHasChanged(); });
+
+    private void ResetCounters()
+    {
+        _totalEntered = 0;
+        _totalExited = 0;
+        _events.Clear();
+        _usingSampledCounts = false;
+        _prevOccupied = _occupancy?.OccupiedSpots ?? -1;
+    }
+
+    private void OnMjpegLoadError()
+    {
+        _wsStatus = "error";
+    }
+
+    public void Dispose()
+    {
+        _kpiTimer?.Dispose();
+        WsService.OnOccupancyUpdate -= HandleUpdate;
+        WsService.OnStatusChange -= HandleStatus;
+    }
+}
