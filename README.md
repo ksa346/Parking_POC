@@ -13,7 +13,18 @@ dotnet --version
 1. Open a separate command prompt and go to the blazor-frontend folder –
 cd blazor-frontend
 2. Run it –  
-dotnet run Note – Frontend will be available at: http://localhost:5002  
+dotnet run Note – Frontend will be available at: http://localhost:5002
+
+**For running the backend-**  
+In anaconda prompt, first create Conda environment –  
+conda create -n parking312 python=3.12 -y  
+Activate it –  
+conda activate parking312  
+Install requirements by going inside backend folder –  
+pip install -r requirements.txt  
+Go to backend folder and then run it –  
+uvicorn app.main:app --host 127.0.0.1 --port 8000  
+Note – For checking backend health: http://127.0.0.1:8000/api/v1/health  
 
 **Config to update before running –**  
 
