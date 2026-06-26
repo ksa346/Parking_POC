@@ -10,7 +10,7 @@ dotnet --version
 
 **For running the Blazor frontend –**  
 
-1. Open a separate command prompt and go to the blazor-frontend folder –
+1. Open a separate command prompt and go to the blazor-frontend folder –  
 cd blazor-frontend
 2. Run it –  
 dotnet run Note – Frontend will be available at: http://localhost:5002
